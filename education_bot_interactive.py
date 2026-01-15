@@ -156,16 +156,9 @@ def telegram_webhook():
     bot.process_new_updates([update])
     return "OK", 200
 
-# ================== START SERVER ==================
-if __name__ == "__main__":
-    PORT = int(os.environ.get("PORT", 10000))
-
-    # SET WEBHOOK
-    if RENDER_URL:
-        webhook_url = f"{RENDER_URL}/{TOKEN}"
-        bot.remove_webhook()
-        bot.set_webhook(url=webhook_url)
-        print("Webhook set to:", webhook_url)
-
-    # Run Flask app
-    app.run(host="0.0.0.0", port=PORT)
+# ================== SET WEBHOOK ==================
+if RENDER_URL:
+    webhook_url = f"{RENDER_URL}/{TOKEN}"
+    bot.remove_webhook()
+    bot.set_webhook(url=webhook_url)
+    print("Webhook set to:", webhook_url)
