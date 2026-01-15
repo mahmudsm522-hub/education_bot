@@ -9,7 +9,7 @@ import requests
 import time
 
 # ================== CONFIG ==================
-TOKEN = os.getenv("TOKEN")  # Daga Render Environment
+TOKEN = os.getenv("TOKEN")  # Bot token daga Render
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 RENDER_URL = os.getenv("RENDER_URL")  # Misali: https://telegram-education-bot-b1qt.onrender.com
 
@@ -56,16 +56,17 @@ def admin_menu():
     kb.add("⬅️ Back to Main Menu")
     return kb
 
-# ================== LOGIN ==================
+# ================== START ==================
 @bot.message_handler(commands=["start"])
 def start(message):
     chat_id = message.chat.id
-    msg = bot.send_message(chat_id, "👋 Welcome! Enter your username:")
+    msg = bot.send_message(chat_id, "👋 Welcome! Enter your name:")
     bot.register_next_step_handler(msg, get_username)
 
 def get_username(message):
     chat_id = message.chat.id
     username = message.text.strip()
+
     users[chat_id] = {
         "username": username,
         "lesson": 0,
@@ -73,13 +74,8 @@ def get_username(message):
         "physics_q_index": 0,
         "attempts": 0
     }
-    msg = bot.send_message(chat_id, "🔑 Enter password:")
-    bot.register_next_step_handler(msg, get_password)
 
-def get_password(message):
-    chat_id = message.chat.id
-    users[chat_id]["password"] = message.text.strip()
-    bot.send_message(chat_id, f"✅ Welcome {users[chat_id]['username']}!", reply_markup=main_menu())
+    bot.send_message(chat_id, f"✅ Welcome {username}!", reply_markup=main_menu())
 
 # ================== PROFILE ==================
 @bot.message_handler(func=lambda m: m.text == "👤 Profile")
@@ -120,7 +116,7 @@ def next_lesson(message):
     users[chat_id]["lesson"] += 1
     send_lesson(chat_id)
 
-# ================== PDF FUNCTIONS ==================
+# ================== PDF ==================
 def generate_python_pdf(chat_id):
     username = users[chat_id]["username"]
     pdf = FPDF()
@@ -133,6 +129,56 @@ def generate_python_pdf(chat_id):
     bot.send_document(chat_id, open(filename, "rb"))
     os.remove(filename)
 
+# ================== PHYSICS QUIZ ==================
+@bot.message_handler(func=lambda m: m.text == "🧲 Physics Quiz")
+def start_physics(message):
+    chat_id = message.chat.id
+    if chat_id not in users:
+        bot.send_message(chat_id, "⚠️ Use /start first")
+        return
+
+    users[chat_id]["physics_q_index"] = 0
+    users[chat_id]["physics_score"] = 0
+    users[chat_id]["attempts"] = 0
+    ask_physics_question(chat_id)
+
+def ask_physics_question(chat_id):
+    idx = users[chat_id]["physics_q_index"]
+    if idx >= len(physics_questions):
+        score = users[chat_id]["physics_score"]
+        total = len(physics_questions)
+        bot.send_message(chat_id, f"🎓 Quiz finished! Score: {score}/{total}")
+        bot.send_message(chat_id, "⬅️ Back to menu", reply_markup=main_menu())
+        return
+
+    q = physics_questions[idx]["q"]
+    msg = bot.send_message(chat_id, f"❓ Question {idx+1}: {q}")
+    bot.register_next_step_handler(msg, check_physics_answer)
+
+def check_physics_answer(message):
+    chat_id = message.chat.id
+    idx = users[chat_id]["physics_q_index"]
+    correct = physics_questions[idx]["a"].lower()
+    answer = message.text.strip().lower()
+
+    if answer == correct:
+        users[chat_id]["physics_score"] += 1
+        users[chat_id]["physics_q_index"] += 1
+        users[chat_id]["attempts"] = 0
+        bot.send_message(chat_id, "✅ Correct!")
+    else:
+        users[chat_id]["attempts"] += 1
+        if users[chat_id]["attempts"] >= 3:
+            bot.send_message(chat_id, f"❌ Failed! Correct answer was: {correct}")
+            users[chat_id]["physics_q_index"] += 1
+            users[chat_id]["attempts"] = 0
+        else:
+            bot.send_message(chat_id, f"⚠️ Wrong! Try again. Attempts left: {3 - users[chat_id]['attempts']}")
+            ask_physics_question(chat_id)
+            return
+
+    ask_physics_question(chat_id)
+
 # ================== ADMIN ==================
 @bot.message_handler(func=lambda m: m.text == "🔐 Admin Panel")
 def admin_panel(message):
@@ -141,7 +187,7 @@ def admin_panel(message):
         return
     bot.send_message(message.chat.id, "Welcome Admin!", reply_markup=admin_menu())
 
-# ================== FLASK WEBHOOK ==================
+# ================== FLASK ==================
 @app.route("/")
 def home():
     return "Bot is running ✅"
@@ -153,19 +199,18 @@ def telegram_webhook():
     bot.process_new_updates([update])
     return "OK", 200
 
-# ================== KEEP ALIVE FUNCTION (OPTIONAL) ==================
+# ================== KEEP ALIVE ==================
 def keep_alive():
     if not RENDER_URL:
         return
     while True:
         try:
             requests.get(f"{RENDER_URL}/")
-            print("Keep-alive ping sent")
         except:
             pass
-        time.sleep(600)  # Ping every 10 minutes
+        time.sleep(600)
 
-# ================== START SERVER & BOT ==================
+# ================== START ==================
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 10000))
 
@@ -183,8 +228,8 @@ if __name__ == "__main__":
 
     Thread(target=start_bot).start()
 
-    # Start keep-alive in thread (optional)
+    # Keep alive thread
     Thread(target=keep_alive, daemon=True).start()
 
-    # Start Flask server
+    # Start Flask
     app.run(host="0.0.0.0", port=PORT)
