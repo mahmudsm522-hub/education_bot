@@ -4,10 +4,14 @@ from telebot import types
 from fpdf import FPDF
 from flask import Flask, request
 from datetime import datetime
+from threading import Thread
+import requests
+import time
 
 # ================== CONFIG ==================
-TOKEN = os.getenv("TOKEN")   # DAGA RENDER ENV
+TOKEN = os.getenv("TOKEN")  # Daga Render Environment
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+RENDER_URL = os.getenv("RENDER_URL")  # Misali: https://telegram-education-bot-b1qt.onrender.com
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -149,16 +153,38 @@ def telegram_webhook():
     bot.process_new_updates([update])
     return "OK", 200
 
-# ================== START SERVER ==================
+# ================== KEEP ALIVE FUNCTION (OPTIONAL) ==================
+def keep_alive():
+    if not RENDER_URL:
+        return
+    while True:
+        try:
+            requests.get(f"{RENDER_URL}/")
+            print("Keep-alive ping sent")
+        except:
+            pass
+        time.sleep(600)  # Ping every 10 minutes
+
+# ================== START SERVER & BOT ==================
 if __name__ == "__main__":
     PORT = int(os.environ.get("PORT", 10000))
 
     # SET WEBHOOK
-    RENDER_URL = os.getenv("RENDER_URL")
     if RENDER_URL:
         webhook_url = f"{RENDER_URL}/{TOKEN}"
         bot.remove_webhook()
         bot.set_webhook(url=webhook_url)
         print("Webhook set to:", webhook_url)
 
+    # Start bot polling in thread
+    def start_bot():
+        print("🤖 Bot is running...")
+        bot.infinity_polling(skip_pending=True, timeout=30)
+
+    Thread(target=start_bot).start()
+
+    # Start keep-alive in thread (optional)
+    Thread(target=keep_alive, daemon=True).start()
+
+    # Start Flask server
     app.run(host="0.0.0.0", port=PORT)
